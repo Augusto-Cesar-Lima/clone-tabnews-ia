@@ -1,36 +1,51 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 // Carrega o react-confetti só no cliente e fora do bundle inicial.
 const ReactConfetti = dynamic(() => import("react-confetti"), { ssr: false });
 
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+
+function subscribeToResize(callback) {
+  window.addEventListener("resize", callback);
+  return () => window.removeEventListener("resize", callback);
+}
+
+function subscribeToReducedMotion(callback) {
+  const mediaQuery = window.matchMedia(REDUCED_MOTION_QUERY);
+  mediaQuery.addEventListener("change", callback);
+  return () => mediaQuery.removeEventListener("change", callback);
+}
+
+const getServerSnapshot = () => null;
+
 export default function Confetti() {
-  const [size, setSize] = useState(null);
   const [done, setDone] = useState(false);
 
-  useEffect(() => {
-    if (done) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setDone(true);
-      return;
-    }
+  const width = useSyncExternalStore(
+    subscribeToResize,
+    () => window.innerWidth,
+    getServerSnapshot,
+  );
+  const height = useSyncExternalStore(
+    subscribeToResize,
+    () => window.innerHeight,
+    getServerSnapshot,
+  );
+  const prefersReducedMotion = useSyncExternalStore(
+    subscribeToReducedMotion,
+    () => window.matchMedia(REDUCED_MOTION_QUERY).matches,
+    getServerSnapshot,
+  );
 
-    function updateSize() {
-      setSize({ width: window.innerWidth, height: window.innerHeight });
-    }
-    updateSize();
-    window.addEventListener("resize", updateSize);
-    return () => window.removeEventListener("resize", updateSize);
-  }, [done]);
-
-  if (done || !size) return null;
+  if (done || prefersReducedMotion !== false || width === null) return null;
 
   return (
     <ReactConfetti
-      width={size.width}
-      height={size.height}
+      width={width}
+      height={height}
       recycle={false}
       numberOfPieces={500}
       onConfettiComplete={() => setDone(true)}
